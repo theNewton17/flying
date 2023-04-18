@@ -36,19 +36,78 @@ function new_phys(x, y, w, h, dx, dy)
   --friction
   if(self.grounded and self.ddx == 0) self.dx *= self.friction
 
+  local vibes = 0
   if mapcoll(self, self.x, oldy) then
+   if(abs(self.dx)>vibes) vibes=abs(self.dx)
    self.x = oldx
    self.dx = 0
   end
   
   if mapcoll(self, oldx, self.y) then
+   if(abs(self.dy)>vibes) vibes=abs(self.dy)
    self.y = oldy
    self.grounded = self.dy>0
    self.dy = 0
   end
+
+  if(vibes > 0.9)new_vibration(self.x,self.y,20*vibes)
  end
 
  return p
+end
+
+function new_particle(x,y,dx,dy,lifetime)
+ local p = {}
+ p.x=x
+ p.y=y
+ p.dx=dx
+ p.dy=dy
+ p.lifetime=lifetime
+ p.t=0
+
+ p.update = function(self)
+  if(self.t > self.lifetime) del(cur_world.particles, self)
+  self.x += self.dx
+  self.y += self.dy
+  self.t += 1
+ end
+
+ p.draw = function(self)
+  pset(self.x,self.y,7)
+ end
+
+ add(cur_world.particles,p)
+ return p
+end
+
+function new_vibration(x, y, max_size)
+ local v = {}
+ v.x=x
+ v.y=y
+ v.max_size=max_size
+ v.size=1
+
+ v.update = function(self)
+  if(self.size > self.max_size) del(cur_world.entities,self)
+  self.size += 1
+
+  --[[for w in all(cur_world.wurms) do
+   if collide_wurm(self.x,self.y,self.size,w) then
+    w.goal = {x=self.x, y=self.y}
+   end
+  end]]
+ end
+
+ v.draw = function(self)
+  pset(self.x,self.y,8)
+ end
+
+ for i=1,16 do 
+  new_particle(x,y,cos(i/16),sin(i/16),max_size)
+ end
+
+ add(cur_world.entities, v)
+ return v
 end
 
 function new_player(x,y)
@@ -81,7 +140,7 @@ function new_player(x,y)
 end
 
 function _init()
- overworld={map={},entities={}}
+ overworld={map={},entities={},particles={}}
  cur_world=overworld
 
  player=new_player(80,100)
@@ -91,6 +150,9 @@ function _update()
  for e in all(cur_world.entities) do
   e:update()
  end
+ for p in all(cur_world.particles) do
+  p:update()
+ end 
 end
 
 function _draw()
@@ -99,6 +161,11 @@ function _draw()
  for e in all(cur_world.entities) do
   e:draw()
  end
+ for p in all(cur_world.particles) do
+  p:draw()
+ end
+ print(player.phys_comp.dx, 0, 0, (abs(player.phys_comp.dx) > 0.9) and 9 or 7)
+ print(player.phys_comp.dy, 0, 8, (abs(player.phys_comp.dy) > 0.9) and 9 or 7)
 end
 
 

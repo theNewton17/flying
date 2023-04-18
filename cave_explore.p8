@@ -301,7 +301,7 @@ function _init()
  table_to_mapmem(cur_world.map)
 
  player=new_player(0,0)
- new_wurm(60,60,64,player)
+ --new_wurm(60,60,64,player)
 end
 
 
@@ -316,8 +316,6 @@ end
 
 function _draw()
  cls()
- --map(0,32,0-camx,0-camy,_width,_height/2)
- --map(0,0,0-camx,256-camy,_width,_height/2)
  camera(camx,camy)
  map(0,32,0,0,_width,_height/2)
  map(0,0,0,256,_width,_height/2)
