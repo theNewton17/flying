@@ -47,11 +47,10 @@ function new_wurm(x, y, len, goal)
   new_head[1]=old_head[1]+cos(self.turn)*self.velocity
   new_head[2]=old_head[2]+sin(self.turn)*self.velocity
 
-  --aim downwards if on top half of screen for too long
+  --aim downwards if too far out of terrain
   local supported = head_in_ground or (tail_in_ground and midpt_supported)
   local goal = supported and self.goal or {x=new_head[1],y=new_head[2]+100}
   local accuracy = supported and self.accuracy or 4
-
 
   local diff = (atan2(goal.x - new_head[1],goal.y - new_head[2]) - self.turn + 0.5) % 1 - 0.5
   --turn towards the target with v/a speed. sin(a/100)/100 is the "wiggle"
@@ -69,6 +68,7 @@ function new_wurm(x, y, len, goal)
   if(self.support ~= nil) pset(self.support[1],self.support[2],8)
  end
 
+ add(cur_world.entities, s)
  return s
 end
 
@@ -78,14 +78,16 @@ function solid(x, y)
 end
 
 function _init()
+ overworld={map={},entities={}}
+ cur_world=overworld
+
  bit = {x=63,y=32}
- wurms = {}
- add(wurms, new_wurm(63,100,64,bit))
+ new_wurm(63,100,64,bit)
 end
 
 function _update()
- for w in all(wurms) do
-  w:update()
+ for e in all(cur_world.entities) do
+  e:update()
  end
 end
 
@@ -93,8 +95,8 @@ function _draw()
  cls()
  map(0,0,0,0,16,16)
  pset(bit.x,bit.y,7)
- for w in all(wurms) do
-  w:draw()
+ for e in all(cur_world.entities) do
+  e:draw()
  end
  print("mem "..stat(0),0,0,7)
  print("cpu "..stat(1),0,8,7)

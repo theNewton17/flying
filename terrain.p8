@@ -7,21 +7,23 @@ _height=64
 _world={}
 
 update_cell = {}
-update_cell[0] = function(n)
- if(n>4) return 1
+update_cell[0] = function(n,i)
+ local t = (i<_height/2) and 4 or 3
+ if(n>t) return 1
  return 0
 end
-update_cell[1] = function(n)
- if(n<4) return 0
+update_cell[1] = function(n,i)
+ local t = (i<_height/2) and 4 or 3
+ if(n<t) return 0
  if(n==8) return 2
  return 1
 end
-update_cell[2] = function(n)
+update_cell[2] = function(n,i)
  if(n<12) return 1
- if(n==16) return 3
+ if(n==16 and i>_height/2) return 3
  return 2
 end
-update_cell[3] = function(n)
+update_cell[3] = function(n,i)
  if(n<24) return 2
  return 3
 end
@@ -84,7 +86,7 @@ function world_step(w)
   for j=0,_width-1 do
    local curval=w[table_2d_pos(j,i)]
    local n=count_neighbors(w,j,i)
-   nw[table_2d_pos(j,i)] = update_cell[curval](n)
+   nw[table_2d_pos(j,i)] = update_cell[curval](n,i)
   end
  end
  return nw
@@ -94,9 +96,6 @@ end
 function _init()
  camx,camy=0,0
  world = rand_world()
- --world = world_step(world)
- --world = world_step(world)
- --world = world_step(world)
  table_to_mapmem(world)
 end
 

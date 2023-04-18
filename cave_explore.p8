@@ -108,6 +108,15 @@ function mapcoll(phys, x, y)
   or solid(x+w_2-1, y+h_2-1)
 end
 
+--returns true if a circle at x1,y1 of radius r1
+--is touching a circle at x2,y2 of radius r2
+function circ_circ(x1,y1,r1,x2,y2,r2)
+ dist_x = x1 - x2
+ dist_y = y1 - y2
+ rad_sum = r1 + r2
+ return dist_x*dist_x + dist_y*dist_y <= rad_sum*rad_sum+1
+end
+
 ----control systems
 physics={}
 physics.update = function()
@@ -151,29 +160,138 @@ controls.update = function()
 end
 
 ----components
+
 function new_phys(x, y, w, h, dx, dy)
  local p = {x=x,y=y,w=w,h=h,
-  dx=dx,dy=dy,mdx=1,mdy=1.5,
-  ddx=0,ddy=0.15,friction=0.8,
+  dx=dx,dy=dy,mdx=1,mdy=1.8,
+  ddx=0,ddy=0.15,friction=0.7,
   grounded=false}
- add(cur_world.phys_comps, p)
+  
+ p.update = function(self)
+  if(self.dy>0) self.grounded=false
+  local oldx,oldy = self.x,self.y
+  --velocity
+  self.x += self.dx
+  self.y += self.dy
+  --acceleration
+  self.dx = mid(-self.mdx,self.dx+self.ddx,self.mdx)
+  self.dy = mid(-self.mdy,self.dy+self.ddy,self.mdy)
+  --friction
+  if(self.grounded and self.ddx == 0) self.dx *= self.friction
+
+  if mapcoll(self, self.x, oldy) then
+   self.x = oldx
+   self.dx = 0
+  end
+  
+  if mapcoll(self, oldx, self.y) then
+   self.y = oldy
+   self.grounded = self.dy>0
+   self.dy = 0
+  end
+ end
+
  return p
 end
 
-function new_entity(phys_comp)
- local e={
-  phys_comp=phys_comp
- }
- add(cur_world.entities, e)
- return e
+----entities
+function new_wurm(x, y, len, goal)
+ local s = {}
+ s.body={}
+ for i=1,len do
+  add(s.body,{x,y})
+ end
+ s.len=len
+ s.size=4
+ s.i=0
+ s.turn=0
+ s.velocity=1
+ s.goal=goal.phys_comp
+ s.support=nil
+ s.accuracy=rnd(100)+1 --lower accuracy means smarter wurm
+ --s.fall_timer=0 --frames wurm has spent above ground before arcing downward
+
+ s.update = function(self)
+  new_head=self.body[1+self.i]
+  local tail_in_ground = solid(new_head[1],new_head[2])
+  old_head=self.body[1+(self.i-1)%#self.body]
+  local head_in_ground = solid(old_head[1],old_head[2])
+
+  if self.support == nil and not head_in_ground then
+   self.support = {old_head[1],old_head[2]}
+  elseif self.support ~= nil and head_in_ground then
+   self.support = nil
+  end
+  
+  local midpt_supported = true
+  if self.support ~= nil then
+   midpt_supported = circ_circ(old_head[1],old_head[2],self.len/2,self.support[1],self.support[2],1)
+  end
+
+  --last segment becomes first segment
+  --means all other segments don't need to move, efficient
+  new_head[1]=old_head[1]+cos(self.turn)*self.velocity
+  new_head[2]=old_head[2]+sin(self.turn)*self.velocity
+
+  --aim downwards if too far out of terrain
+  local supported = head_in_ground or (tail_in_ground and midpt_supported)
+  local goal = supported and self.goal or {x=new_head[1],y=new_head[2]+100}
+  local accuracy = supported and self.accuracy or 4
+
+  local diff = (atan2(goal.x - new_head[1],goal.y - new_head[2]) - self.turn + 0.5) % 1 - 0.5
+  --turn towards the target with v/a speed. sin(a/100)/100 is the "wiggle"
+  self.turn += ((diff<-0.5 and diff+1 or diff) * self.velocity/accuracy + sin(accuracy/100)/100)
+
+  self.accuracy-=1
+  self.i=(self.i+1) % #self.body
+  if (self.accuracy<5) self.accuracy=rnd(100)+1
+ end
+
+ s.draw = function(self)
+  for seg in all(self.body) do
+   circfill(seg[1], seg[2], self.size, 9)
+  end
+  if(self.support ~= nil) pset(self.support[1],self.support[2],8)
+ end
+
+ add(cur_world.entities, s)
+ return s
 end
 
---end control systems
+function new_player(x,y)
+ local p = {phys_comp=new_phys(x,y,7,7,0,0)}
+
+ p.update = function(self)
+  --player controls
+  local grnd = self.phys_comp.grounded
+  if grnd and btnp(2) then
+   self.phys_comp.grounded = false
+   self.phys_comp.dy = -self.phys_comp.mdy
+  end
+
+  self.phys_comp.ddx=0
+  local left,right = btn(0),btn(1)
+  if not (left and right) then
+   if(left) self.phys_comp.ddx = (grnd and -0.2 or -0.05)
+   if(right) self.phys_comp.ddx = (grnd and 0.2 or 0.05)
+  end
+
+  p.phys_comp:update()
+ end
+
+ p.draw = function(self)
+  spr(0, self.phys_comp.x-4, self.phys_comp.y-4)
+ end
+
+ add(cur_world.entities, p)
+ return p
+end
+
 --begin game loop
 
 function _init()
  camx,camy=0,0
- overworld={map={},entities={},phys_comps={}}
+ overworld={map={},entities={}}
  cur_world=overworld
 
  cur_world.map = rand_world()
@@ -182,15 +300,15 @@ function _init()
  cur_world.map = world_step(cur_world.map)
  table_to_mapmem(cur_world.map)
 
- player=new_entity(
-  new_phys(8,0,7,7,0,0)
- )
+ player=new_player(0,0)
+ new_wurm(60,60,64,player)
 end
 
 
 function _update()
- controls.update()
- physics.update()
+ for e in all(cur_world.entities) do
+  e:update()
+ end
  camx=mid(0,player.phys_comp.x-64,512)
  camy=mid(0,player.phys_comp.y-64,512)
 end
@@ -203,8 +321,10 @@ function _draw()
  camera(camx,camy)
  map(0,32,0,0,_width,_height/2)
  map(0,0,0,256,_width,_height/2)
- print(cur_world.map[table_2d_pos(camx\8,camy\8)], 10, 10)
- spr(0, player.phys_comp.x-4, player.phys_comp.y-4)
+ --print(cur_world.map[table_2d_pos(camx\8,camy\8)], 10, 10)
+ for e in all(cur_world.entities) do
+  e:draw()
+ end
 end
 
 
